@@ -1,68 +1,87 @@
-# Reverse Proxy for Cloud Run
+# Cloud Run Reverse Proxy
 
-This project provides a reverse proxy that forwards incoming requests to either public or private Google Cloud Run services.
+`reverseproxy` is a Go package that provides a simple reverse proxy implementation with customizable routing rules for Google Cloud Run services. It allows you to route incoming HTTP requests to different backend services based on rules such as path prefixes or client IP addresses. The package also handles OIDC token generation for authenticated communication between services.
 
-## Prerequisites
+## Installation
 
-- [Go](https://go.dev/dl/)
-- [Docker](https://docs.docker.com/get-docker/)
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install)
-
-## Getting Started
-
-1. Clone the repository:
+To install the package, run:
 
 ```bash
-git clone https://github.com/dbut2/cloud-run-reverse-proxy.git
-cd cloud-run-reverse-proxy
+go get -u github.com/dbut2/cloud-run-reverse-proxy
 ```
 
-2. Set the required environment variables:
+## Usage
 
-```bash
-export PUBLIC_URL="https://your-public-service.run.app"
-export PRIVATE_URL="https://your-private-service.run.app"
-export PRIVATE_CLIENT_ID="127.0.0.1"
+### Import the package
+
+```go
+import "github.com/dbut2/cloud-run-reverse-proxy"
 ```
 
-3. Build the Docker image:
+### Create a reverse proxy
 
-```bash
-docker build -t reverse-proxy -f reverse-proxy.Dockerfile .
+Define your routing rules using the `reverseproxy.Rule` type. You can create rules based on path prefixes or client IP addresses using the `PathRule` and `IPRule` functions. Finally, create a reverse proxy instance with the defined rules using the `New` function.
+
+```go
+rules := []reverseproxy.Rule{
+    // Reverse proxy rules...
+}
+proxy := reverseproxy.New(rules)
 ```
 
-4. Run the Docker container:
+### Run the reverse proxy server
 
-```bash
-docker run -it --rm -p 8080:8080 \
---env PUBLIC_URL=$PUBLIC_URL \
---env PRIVATE_URL=$PRIVATE_URL \
---env PRIVATE_CLIENT_ID=$PRIVATE_CLIENT_ID \
-reverse-proxy
+Register the reverse proxy as an HTTP handler and start the server.
+
+```go
+http.HandleFunc("/", proxy.ServeHTTP)
+http.ListenAndServe(":8080", nil)
 ```
 
-The reverse proxy is now running on `http://localhost:8080` and will forward incoming requests to the appropriate Cloud Run service based on the client's IP address.
+## Example
 
-## Deployment
+Below is a complete example demonstrating how to create and use a reverse proxy with customizable routing rules:
 
-To deploy the reverse proxy on Google Cloud Run, follow these steps:
+```go
+package main
 
-1. Push the Docker image to Google Container Registry:
+import (
+    "log"
+    "net/http"
+    "os"
 
-```bash
-docker tag reverse-proxy gcr.io/YOUR_PROJECT_ID/reverse-proxy
-docker push gcr.io/YOUR_PROJECT_ID/reverse-proxy
+    "github.com/dbut2/cloud-run-reverse-proxy"
+)
+
+func main() {
+	// Load environment variables
+	publicURL := os.Getenv("PUBLIC_URL")
+	privateURL := os.Getenv("PRIVATE_URL")
+	privateClientIP := os.Getenv("PRIVATE_CLIENT_ID")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	// Define routing rules
+	rules := []reverseproxy.Rule{
+		reverseproxy.IPRule(privateClientIP, privateURL),
+		reverseproxy.BaseRule(publicURL),
+	}
+
+	// Create the reverse proxy with the defined rules
+	proxy := reverseproxy.New(rules)
+
+	// Register the reverse proxy as an HTTP handler
+	http.HandleFunc("/", proxy.ServeHTTP)
+
+	// Start the HTTP server
+	log.Printf("Starting reverse proxy on :%s\n", port)
+	err := http.ListenAndServe(":"+port, nil)
+	if err != nil {
+		panic(err)
+	}
+}
 ```
 
-2. Deploy the Cloud Run service:
-
-```bash
-gcloud run deploy reverse-proxy \
---image gcr.io/YOUR_PROJECT_ID/reverse-proxy \
---platform managed \
---allow-unauthenticated \
---region YOUR_REGION \
---update-env-vars PUBLIC_URL=$PUBLIC_URL,PRIVATE_URL=$PRIVATE_URL,PRIVATE_CLIENT_ID=$PRIVATE_CLIENT_ID
-```
-
-This will deploy the reverse proxy to a new Cloud Run service. The `--allow-unauthenticated` flag is used to allow public access to the reverse proxy. Make sure to replace `YOUR_PROJECT_ID` and `YOUR_REGION` with your Google Cloud project ID and the desired region, respectively.
+Don't forget to set the environment variables `PUBLIC_URL`, `PRIVATE_URL`, `PRIVATE_CLIENT_ID`, and `PORT` before running the example.
