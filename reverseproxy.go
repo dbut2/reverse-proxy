@@ -27,6 +27,10 @@ func New(rules []Rule) *httputil.ReverseProxy {
 				}
 			}
 
+			if targetURL == "" {
+				return
+			}
+
 			target, _ := url.Parse(targetURL)
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
@@ -47,6 +51,9 @@ func New(rules []Rule) *httputil.ReverseProxy {
 			}
 
 			req.Header.Add("Authorization", "Bearer "+token.AccessToken)
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, "Not found", http.StatusNotFound)
 		},
 	}
 }

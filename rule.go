@@ -44,3 +44,32 @@ func IPRule(clientIP string, service string) Rule {
 		return service, reqClientIP == clientIP
 	}
 }
+
+// HeaderRule creates a routing rule that matches requests based on the
+// presence of a specific header. If the request contains the specified
+// header, the rule matches and routes the request to the specified service.
+func HeaderRule(header string, service string) Rule {
+	return func(r *http.Request) (string, bool) {
+		_, ok := r.Header[header]
+		return service, ok
+	}
+}
+
+// HeaderMatchesRule creates a routing rule that matches requests based on
+// a specific header and its value. If the request contains the specified
+// header and at least one of its values matches the provided value, the rule
+// matches and routes the request to the specified service.
+func HeaderMatchesRule(header string, value string, service string) Rule {
+	return func(r *http.Request) (string, bool) {
+		headerValues, ok := r.Header[header]
+		if !ok {
+			return service, false
+		}
+		for _, headerValue := range headerValues {
+			if headerValue == value {
+				return service, true
+			}
+		}
+		return service, false
+	}
+}
