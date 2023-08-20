@@ -42,8 +42,9 @@ func New(selectors ...Selector) *httputil.ReverseProxy {
 			}
 
 			target, _ := url.Parse(targetURL)
-			r.URL.Scheme = target.Scheme
-			r.URL.Host = target.Host
+			path := target.Path + r.URL.Path
+			r.URL = target
+			r.URL.Path = path
 			r.Header.Set("X-Forwarded-Host", r.Host)
 			r.Host = target.Host
 
