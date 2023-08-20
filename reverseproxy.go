@@ -1,6 +1,4 @@
-// Package reverseproxy provides a simple reverse proxy implementation
-// with customizable routing rules.
-package reverseproxy
+package rp
 
 import (
 	"context"
@@ -12,19 +10,31 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-// New creates a new reverse proxy instance with the specified routing rules.
-// It forwards incoming requests to the target service based on the rules.
-// The first rule that matches the request will be used to determine the target service.
-// The proxy also handles OIDC token generation and adds the "Authorization" header to the request.
-func New(rules []Rule) *httputil.ReverseProxy {
+type Selector struct {
+	rule    Rule
+	service string
+}
+
+func Select(service string, rule Rule) Selector {
+	return Selector{rule: rule, service: service}
+}
+
+func New(selectors ...Selector) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
+		Director: func(r *http.Request) {
 			var targetURL string
-			for _, rule := range rules {
-				if service, matches := rule(req); matches {
-					targetURL = service
-					break
+			var modifier func()
+
+			for _, selector := range selectors {
+				match, mod := selector.rule(r)
+				if !match {
+					continue
 				}
+
+				targetURL = selector.service
+				modifier = mod
+
+				break
 			}
 
 			if targetURL == "" {
@@ -32,10 +42,14 @@ func New(rules []Rule) *httputil.ReverseProxy {
 			}
 
 			target, _ := url.Parse(targetURL)
-			req.URL.Scheme = target.Scheme
-			req.URL.Host = target.Host
-			req.Header.Set("X-Forwarded-Host", req.Host)
-			req.Host = target.Host
+			r.URL.Scheme = target.Scheme
+			r.URL.Host = target.Host
+			r.Header.Set("X-Forwarded-Host", r.Host)
+			r.Host = target.Host
+
+			if modifier != nil {
+				modifier()
+			}
 
 			ctx := context.Background()
 			tokenSource, err := idtoken.NewTokenSource(ctx, targetURL)
@@ -50,7 +64,7 @@ func New(rules []Rule) *httputil.ReverseProxy {
 				return
 			}
 
-			req.Header.Add("Authorization", "Bearer "+token.AccessToken)
+			r.Header.Add("Authorization", "Bearer "+token.AccessToken)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Not found", http.StatusNotFound)
