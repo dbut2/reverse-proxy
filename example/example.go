@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/dbut2/cloud-run-reverse-proxy"
+	"github.com/dbut2/reverse-proxy"
 )
 
 func main() {
@@ -26,13 +26,13 @@ func main() {
 	}
 
 	// Define routing rules
-	rules := []reverseproxy.Rule{
-		reverseproxy.IPRule(privateClientIP, privateURL),
-		reverseproxy.BaseRule(publicURL),
+	rules := []rp.Selector{
+		rp.Select(privateURL, rp.IPRule(privateClientIP)),
+		rp.Select(publicURL, rp.BaseRule()),
 	}
 
 	// Create the reverse proxy with the defined rules
-	proxy := reverseproxy.New(rules)
+	proxy := rp.New(rules...)
 
 	// Register the reverse proxy as an HTTP handler
 	http.HandleFunc("/", proxy.ServeHTTP)

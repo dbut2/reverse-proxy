@@ -1,9 +1,6 @@
-// Package reverseproxy provides a simple reverse proxy implementation
-// with customizable routing rules.
-package reverseproxy
+package rp
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -12,45 +9,80 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-// New creates a new reverse proxy instance with the specified routing rules.
-// It forwards incoming requests to the target service based on the rules.
-// The first rule that matches the request will be used to determine the target service.
-// The proxy also handles OIDC token generation and adds the "Authorization" header to the request.
-func New(rules []Rule) *httputil.ReverseProxy {
+type Selector struct {
+	rule    Rule
+	service *url.URL
+	opts    []Option
+}
+
+func Select(service string, rule Rule, opts ...Option) Selector {
+	serviceURL, err := url.Parse(service)
+	if err != nil {
+		panic(err.Error())
+	}
+	return Selector{rule: rule, service: serviceURL, opts: opts}
+}
+
+type Option func(*http.Request)
+
+func WithOIDC() Option {
+	return func(r *http.Request) {
+		var audience url.URL
+
+		audience.Scheme = r.URL.Scheme
+		audience.User = r.URL.User
+		audience.Host = r.URL.Host
+
+		tokenSource, err := idtoken.NewTokenSource(r.Context(), audience.String())
+		if err != nil {
+			log.Printf("Failed to create token source: %v\n", err)
+			return
+		}
+
+		token, err := tokenSource.Token()
+		if err != nil {
+			log.Printf("Failed to obtain an OIDC token: %v\n", err)
+			return
+		}
+
+		r.Header.Add("Authorization", "Bearer "+token.AccessToken)
+	}
+}
+
+func New(selectors ...Selector) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			var targetURL string
-			for _, rule := range rules {
-				if service, matches := rule(req); matches {
-					targetURL = service
-					break
+		Rewrite: func(r *httputil.ProxyRequest) {
+			var targetURL *url.URL
+			var opts []Option
+
+			matched := false
+			for _, selector := range selectors {
+				match := selector.rule(r.In, r.Out)
+				if !match {
+					continue
 				}
+				matched = true
+
+				targetURL = selector.service
+				opts = selector.opts
+
+				break
 			}
 
-			if targetURL == "" {
+			if !matched {
 				return
 			}
 
-			target, _ := url.Parse(targetURL)
-			req.URL.Scheme = target.Scheme
-			req.URL.Host = target.Host
-			req.Header.Set("X-Forwarded-Host", req.Host)
-			req.Host = target.Host
+			path, _ := url.JoinPath("/", targetURL.Path, r.Out.URL.Path)
 
-			ctx := context.Background()
-			tokenSource, err := idtoken.NewTokenSource(ctx, targetURL)
-			if err != nil {
-				log.Printf("Failed to create token source: %v\n", err)
-				return
+			r.SetXForwarded()
+			r.SetURL(targetURL)
+
+			r.Out.URL.Path = path
+
+			for _, opt := range opts {
+				opt(r.Out)
 			}
-
-			token, err := tokenSource.Token()
-			if err != nil {
-				log.Printf("Failed to obtain an OIDC token: %v\n", err)
-				return
-			}
-
-			req.Header.Add("Authorization", "Bearer "+token.AccessToken)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Not found", http.StatusNotFound)

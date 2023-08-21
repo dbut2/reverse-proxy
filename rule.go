@@ -1,75 +1,117 @@
-// Package reverseproxy provides a simple reverse proxy implementation
-// with customizable routing rules.
-package reverseproxy
+package rp
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
-// Rule represents a routing rule for the reverse proxy.
-// It returns the target service URL and a boolean indicating
-// whether the rule matches the request or not.
-type Rule func(r *http.Request) (string, bool)
+type Rule func(in *http.Request, out *http.Request) bool
 
-// BaseRule creates a basic routing rule that matches all requests
-// and routes them to the specified service.
-func BaseRule(service string) Rule {
-	return func(r *http.Request) (string, bool) {
-		return service, true
+func BaseRule() Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		return true
 	}
 }
 
-// PathRule creates a routing rule that matches requests based on their path.
-// If the request path starts with the specified path, the rule matches
-// and routes the request to the specified service.
-func PathRule(path string, service string) Rule {
-	return func(r *http.Request) (string, bool) {
-		return service, strings.HasPrefix(r.URL.Path, path)
+func PathRule(path string) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		hasPrefix := strings.HasPrefix(in.URL.Path, path)
+
+		if !hasPrefix {
+			return false
+		}
+
+		out.URL.Path = strings.TrimPrefix(out.URL.Path, path)
+		return true
 	}
 }
 
-// IPRule creates a routing rule that matches requests based on their client IP.
-// If the request comes from the specified client IP, the rule matches
-// and routes the request to the specified service.
-// The client IP is extracted from the "X-Forwarded-For" header.
-func IPRule(clientIP string, service string) Rule {
-	return func(r *http.Request) (string, bool) {
-		xff := r.Header.Get("X-Forwarded-For")
+func IPRule(clientIP string) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		xff := in.Header.Get("X-Forwarded-For")
 		ips := strings.Split(xff, ",")
 		reqClientIP := ""
 		if len(ips) > 0 {
 			reqClientIP = strings.TrimSpace(ips[0])
 		}
-		return service, reqClientIP == clientIP
+		return reqClientIP == clientIP
 	}
 }
 
-// HeaderRule creates a routing rule that matches requests based on the
-// presence of a specific header. If the request contains the specified
-// header, the rule matches and routes the request to the specified service.
-func HeaderRule(header string, service string) Rule {
-	return func(r *http.Request) (string, bool) {
-		_, ok := r.Header[header]
-		return service, ok
+func HeaderRule(header string) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		_, ok := in.Header[header]
+		return ok
 	}
 }
 
-// HeaderMatchesRule creates a routing rule that matches requests based on
-// a specific header and its value. If the request contains the specified
-// header and at least one of its values matches the provided value, the rule
-// matches and routes the request to the specified service.
-func HeaderMatchesRule(header string, value string, service string) Rule {
-	return func(r *http.Request) (string, bool) {
-		headerValues, ok := r.Header[header]
+func HeaderMatchesRule(header string, value string) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		headerValues, ok := in.Header[header]
 		if !ok {
-			return service, false
+			return false
 		}
 		for _, headerValue := range headerValues {
 			if headerValue == value {
-				return service, true
+				return true
 			}
 		}
-		return service, false
+		return false
+	}
+}
+
+func QueryParamRule(param string) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		values := in.URL.Query()[param]
+		if len(values) > 0 {
+			return true
+		}
+		return false
+	}
+}
+
+func HostRule(host string) Rule {
+	u, _ := url.Parse(host)
+
+	return func(in *http.Request, out *http.Request) bool {
+		return in.URL.Host == u.Host
+	}
+}
+
+func HostPathRule(hostnamepath string) Rule {
+	u, _ := url.Parse(hostnamepath)
+	return AllRule(HostRule(u.Host), PathRule(u.Path))
+}
+
+func MethodRule(method string) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		return in.Method == method
+	}
+}
+
+func AllRule(rules ...Rule) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		for _, rule := range rules {
+			if !rule(in, out) {
+				return false
+			}
+		}
+
+		return true
+	}
+}
+
+func AnyRule(rules ...Rule) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		for _, rule := range rules {
+			if !rule(in, out) {
+				continue
+			}
+
+			return true
+		}
+
+		return false
 	}
 }
