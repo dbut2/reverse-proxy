@@ -73,7 +73,7 @@ func New(selectors ...Selector) *httputil.ReverseProxy {
 				return
 			}
 
-			path, _ := url.JoinPath(targetURL.Path, r.Out.URL.Path)
+			path, _ := url.JoinPath("/", targetURL.Path, r.Out.URL.Path)
 
 			r.SetXForwarded()
 			r.SetURL(targetURL)
