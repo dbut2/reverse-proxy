@@ -1,7 +1,6 @@
 package rp
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -12,60 +11,78 @@ import (
 
 type Selector struct {
 	rule    Rule
-	service string
+	service *url.URL
+	opts    []Option
 }
 
-func Select(service string, rule Rule) Selector {
-	return Selector{rule: rule, service: service}
+func Select(service string, rule Rule, opts ...Option) Selector {
+	serviceURL, err := url.Parse(service)
+	if err != nil {
+		panic(err.Error())
+	}
+	return Selector{rule: rule, service: serviceURL, opts: opts}
+}
+
+type Option func(*http.Request)
+
+func WithOIDC() Option {
+	return func(r *http.Request) {
+		var audience url.URL
+
+		audience.Scheme = r.URL.Scheme
+		audience.User = r.URL.User
+		audience.Host = r.URL.Host
+
+		tokenSource, err := idtoken.NewTokenSource(r.Context(), audience.String())
+		if err != nil {
+			log.Printf("Failed to create token source: %v\n", err)
+			return
+		}
+
+		token, err := tokenSource.Token()
+		if err != nil {
+			log.Printf("Failed to obtain an OIDC token: %v\n", err)
+			return
+		}
+
+		r.Header.Add("Authorization", "Bearer "+token.AccessToken)
+	}
 }
 
 func New(selectors ...Selector) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
-		Director: func(r *http.Request) {
-			var targetURL string
-			var modifier func()
+		Rewrite: func(r *httputil.ProxyRequest) {
+			var targetURL *url.URL
+			var opts []Option
 
+			matched := false
 			for _, selector := range selectors {
-				match, mod := selector.rule(r)
+				match := selector.rule(r.In, r.Out)
 				if !match {
 					continue
 				}
+				matched = true
 
 				targetURL = selector.service
-				modifier = mod
+				opts = selector.opts
 
 				break
 			}
 
-			if targetURL == "" {
+			if !matched {
 				return
 			}
 
-			target, _ := url.Parse(targetURL)
-			path := target.Path + r.URL.Path
-			r.URL = target
-			r.URL.Path = path
-			r.Header.Set("X-Forwarded-Host", r.Host)
-			r.Host = target.Host
+			path, _ := url.JoinPath(targetURL.Path, r.Out.URL.Path)
 
-			if modifier != nil {
-				modifier()
+			r.SetXForwarded()
+			r.SetURL(targetURL)
+
+			r.Out.URL.Path = path
+
+			for _, opt := range opts {
+				opt(r.Out)
 			}
-
-			ctx := context.Background()
-			tokenSource, err := idtoken.NewTokenSource(ctx, targetURL)
-			if err != nil {
-				log.Printf("Failed to create token source: %v\n", err)
-				return
-			}
-
-			token, err := tokenSource.Token()
-			if err != nil {
-				log.Printf("Failed to obtain an OIDC token: %v\n", err)
-				return
-			}
-
-			r.Header.Add("Authorization", "Bearer "+token.AccessToken)
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Not found", http.StatusNotFound)

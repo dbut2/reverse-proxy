@@ -2,123 +2,116 @@ package rp
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
-type Rule func(r *http.Request) (bool, func())
-
-func noEdit() {}
-
-func noMatch() (bool, func()) { return false, nil }
+type Rule func(in *http.Request, out *http.Request) bool
 
 func BaseRule() Rule {
-	return func(r *http.Request) (bool, func()) {
-		return true, noEdit
+	return func(in *http.Request, out *http.Request) bool {
+		return true
 	}
 }
 
 func PathRule(path string) Rule {
-	return func(r *http.Request) (bool, func()) {
-		hasPrefix := strings.HasPrefix(r.URL.Path, path)
+	return func(in *http.Request, out *http.Request) bool {
+		hasPrefix := strings.HasPrefix(in.URL.Path, path)
 
 		if !hasPrefix {
-			return noMatch()
+			return false
 		}
 
-		return true, func() {
-			r.URL.Path = strings.TrimPrefix(r.URL.Path, path)
-		}
+		out.URL.Path = strings.TrimPrefix(out.URL.Path, path)
+		return true
 	}
 }
 
 func IPRule(clientIP string) Rule {
-	return func(r *http.Request) (bool, func()) {
-		xff := r.Header.Get("X-Forwarded-For")
+	return func(in *http.Request, out *http.Request) bool {
+		xff := in.Header.Get("X-Forwarded-For")
 		ips := strings.Split(xff, ",")
 		reqClientIP := ""
 		if len(ips) > 0 {
 			reqClientIP = strings.TrimSpace(ips[0])
 		}
-		return reqClientIP == clientIP, noEdit
+		return reqClientIP == clientIP
 	}
 }
 
 func HeaderRule(header string) Rule {
-	return func(r *http.Request) (bool, func()) {
-		_, ok := r.Header[header]
-		return ok, noEdit
+	return func(in *http.Request, out *http.Request) bool {
+		_, ok := in.Header[header]
+		return ok
 	}
 }
 
 func HeaderMatchesRule(header string, value string) Rule {
-	return func(r *http.Request) (bool, func()) {
-		headerValues, ok := r.Header[header]
+	return func(in *http.Request, out *http.Request) bool {
+		headerValues, ok := in.Header[header]
 		if !ok {
-			return noMatch()
+			return false
 		}
 		for _, headerValue := range headerValues {
 			if headerValue == value {
-				return true, noEdit
+				return true
 			}
 		}
-		return noMatch()
+		return false
 	}
 }
 
 func QueryParamRule(param string) Rule {
-	return func(r *http.Request) (bool, func()) {
-		values := r.URL.Query()[param]
+	return func(in *http.Request, out *http.Request) bool {
+		values := in.URL.Query()[param]
 		if len(values) > 0 {
-			return true, noEdit
+			return true
 		}
-		return noMatch()
+		return false
 	}
 }
 
-func HostnameRule(hostname string) Rule {
-	return func(r *http.Request) (bool, func()) {
-		return r.URL.Hostname() == hostname, noEdit
+func HostRule(host string) Rule {
+	u, _ := url.Parse(host)
+
+	return func(in *http.Request, out *http.Request) bool {
+		return in.URL.Host == u.Host
 	}
+}
+
+func HostPathRule(hostnamepath string) Rule {
+	u, _ := url.Parse(hostnamepath)
+	return AllRule(HostRule(u.Host), PathRule(u.Path))
 }
 
 func MethodRule(method string) Rule {
-	return func(r *http.Request) (bool, func()) {
-		return r.Method == method, noEdit
+	return func(in *http.Request, out *http.Request) bool {
+		return in.Method == method
 	}
 }
 
-func AllRule(rules []Rule) Rule {
-	return func(r *http.Request) (bool, func()) {
-		modifiers := make([]func(), len(rules))
-
-		for i, rule := range rules {
-			match, modifier := rule(r)
-			if !match {
-				return noMatch()
-			}
-
-			modifiers[i] = modifier
-		}
-
-		return true, func() {
-			for _, modifier := range modifiers {
-				modifier()
-			}
-		}
-	}
-}
-
-func AnyRule(rules []Rule) Rule {
-	return func(r *http.Request) (bool, func()) {
+func AllRule(rules ...Rule) Rule {
+	return func(in *http.Request, out *http.Request) bool {
 		for _, rule := range rules {
-			match, modifier := rule(r)
-			if !match {
+			if !rule(in, out) {
+				return false
+			}
+		}
+
+		return true
+	}
+}
+
+func AnyRule(rules ...Rule) Rule {
+	return func(in *http.Request, out *http.Request) bool {
+		for _, rule := range rules {
+			if !rule(in, out) {
 				continue
 			}
 
-			return true, modifier
+			return true
 		}
 
-		return noMatch()
+		return false
 	}
 }
