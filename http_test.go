@@ -5,12 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	rp "github.com/dbut2/reverse-proxy"
+	"github.com/dbut2/reverse-proxy"
 )
 
 func setupService(serviceName string) *httptest.Server {
@@ -26,9 +25,9 @@ func TestReverseProxy(t *testing.T) {
 	service2 := setupService("Service2")
 	defer service2.Close()
 
-	selections := []rp.Selector{
-		rp.Select(service1.URL, rp.PathRule("/service1")),
-		rp.Select(service2.URL, rp.PathRule("/service2")),
+	selections := []*rp.Selector{
+		rp.Select(service1.URL, rp.PathIsAt("/service1")),
+		rp.Select(service2.URL, rp.PathIsAt("/service2")),
 	}
 
 	proxy := httptest.NewServer(rp.New(selections...))

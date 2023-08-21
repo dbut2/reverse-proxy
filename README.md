@@ -1,86 +1,63 @@
-# Cloud Run Reverse Proxy
+# Reverse Proxy
 
-`reverseproxy` is a Go package that provides a simple reverse proxy implementation with customizable routing rules for Google Cloud Run services. It allows you to route incoming HTTP requests to different backend services based on rules such as path prefixes or client IP addresses. The package also handles OIDC token generation for authenticated communication between services.
-
-## Installation
-
-To install the package, run:
-
-```bash
-go get -u github.com/dbut2/reverse-proxy
-```
+The reverse proxy package provides a wrapper around `httputil.ReverseProxy`, adding the ability to create flexible, rule based routing
 
 ## Usage
 
-### Import the package
+Import reverse-proxy
+```shell
+go get github.com/dbut2/reverse-proxy
+```
 
+In your Go code, add
 ```go
 import "github.com/dbut2/reverse-proxy"
 ```
 
-### Create a reverse proxy
-
-Define your routing rules using the `reverseproxy.Selector` type. You can create rules based on path prefixes or client IP addresses using the `PathRule` and `IPRule` functions. Finally, create a reverse proxy instance with the defined rules using the `New` function.
-
+Creating a reverse proxy with selectors
 ```go
-selectors := []rp.Selector{
-    // Reverse proxy selectors...
-}
-proxy := reverseproxy.New(selectors...)
+proxy := rp.New(
+    rp.Select("https://myapi.com", rp.PathIsAt("/api")),
+    rp.Select("https://example.com", rp.Always()),
+)
 ```
 
-### Run the reverse proxy server
-
-Register the reverse proxy as an HTTP handler and start the server.
-
+Using selector options
 ```go
+proxy := rp.New(
+    rp.Select("https://private-cloud-run-instance.com", rp.IPMatches("12.34.56.78"), rp.WithOIDC()),
+    rp.Select("https://example.com", rp.Always()),
+)
+```
+
+Listen and serve
+```go
+proxy := rp.New(
+    rp.Select("https://myapi.com", rp.PathIsAt("/api")),
+    rp.Select("https://example.com", rp.Always()),
+)
+
 http.ListenAndServe(":8080", proxy)
 ```
 
-## Example
-
-Below is a complete example demonstrating how to create and use a reverse proxy with customizable routing rules:
+### Example
 
 ```go
 package main
 
 import (
-    "log"
-    "net/http"
-    "os"
+	"net/http"
 
-    "github.com/dbut2/reverse-proxy"
+	"github.com/dbut2/reverse-proxy"
 )
 
 func main() {
-	// Load environment variables
-	publicURL := os.Getenv("PUBLIC_URL")
-	privateURL := os.Getenv("PRIVATE_URL")
-	privateClientIP := os.Getenv("PRIVATE_CLIENT_ID")
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	proxy := rp.New(
+		rp.Select("https://myapi.com", rp.PathIsAt("/api")),
+		rp.Select("https://example.com", rp.Always()),
+	)
 
-	// Define routing selectors
-	selectors := []rp.Selector{
-		rp.Select(privateURL, rp.IPRule(privateClientIP)),
-		rp.Select(publicURL, rp.BaseRule()),
-    }
-
-	// Create the reverse proxy with the defined rules
-	proxy := rp.New(selectors...)
-
-	// Register the reverse proxy as an HTTP handler
-	http.HandleFunc("/", proxy.ServeHTTP)
-
-	// Start the HTTP server
-	log.Printf("Starting reverse proxy on :%s\n", port)
-	err := http.ListenAndServe(":"+port, nil)
-	if err != nil {
-		panic(err)
-	}
+	http.ListenAndServe(":8080", proxy)
 }
 ```
 
-Don't forget to set the environment variables `PUBLIC_URL`, `PRIVATE_URL`, `PRIVATE_CLIENT_ID`, and `PORT` before running the example.
