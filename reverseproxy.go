@@ -1,7 +1,7 @@
 package rp
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -9,83 +9,83 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-type Selector struct {
-	rule    Rule
-	service *url.URL
-	opts    []Option
-}
-
-func Select(service string, rule Rule, opts ...Option) Selector {
-	serviceURL, err := url.Parse(service)
-	if err != nil {
-		panic(err.Error())
-	}
-	return Selector{rule: rule, service: serviceURL, opts: opts}
-}
-
-type Option func(*http.Request)
-
-func WithOIDC() Option {
-	return func(r *http.Request) {
-		var audience url.URL
-
-		audience.Scheme = r.URL.Scheme
-		audience.User = r.URL.User
-		audience.Host = r.URL.Host
-
-		tokenSource, err := idtoken.NewTokenSource(r.Context(), audience.String())
-		if err != nil {
-			log.Printf("Failed to create token source: %v\n", err)
-			return
-		}
-
-		token, err := tokenSource.Token()
-		if err != nil {
-			log.Printf("Failed to obtain an OIDC token: %v\n", err)
-			return
-		}
-
-		r.Header.Add("Authorization", "Bearer "+token.AccessToken)
-	}
-}
-
-func New(selectors ...Selector) *httputil.ReverseProxy {
+func New(selectors ...*Selector) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
-			var targetURL *url.URL
-			var opts []Option
-
-			matched := false
-			for _, selector := range selectors {
-				match := selector.rule(r.In, r.Out)
-				if !match {
-					continue
-				}
-				matched = true
-
-				targetURL = selector.service
-				opts = selector.opts
-
-				break
-			}
-
+			selector, matched := findSelector(selectors, r.In, r.Out)
 			if !matched {
 				return
 			}
 
-			path, _ := url.JoinPath("/", targetURL.Path, r.Out.URL.Path)
-
 			r.SetXForwarded()
-			r.SetURL(targetURL)
-
+			path, _ := url.JoinPath("/", selector.url.Path, r.Out.URL.Path)
+			r.SetURL(selector.url)
 			r.Out.URL.Path = path
 
-			for _, opt := range opts {
-				opt(r.Out)
+			for _, modifier := range selector.modifiers {
+				modifier(r.Out)
 			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			http.Error(w, "Not found", http.StatusNotFound)
 		},
+	}
+}
+
+func findSelector(selectors []*Selector, in, out *http.Request) (*Selector, bool) {
+	for _, selector := range selectors {
+		if selector.rule(in, out) {
+			return selector, true
+		}
+	}
+	return nil, false
+}
+
+// Selector contains information for selecting and modifying requests
+type Selector struct {
+	rule      Rule
+	url       *url.URL
+	modifiers []func(r *http.Request)
+	opts      []SelectOption
+}
+
+// Select returns a selector to the address for matching on when rule
+func Select(address string, when Rule, opts ...SelectOption) *Selector {
+	serviceURL, err := url.Parse(address)
+	if err != nil {
+		panic(err.Error())
+	}
+	s := &Selector{rule: when, url: serviceURL, opts: opts}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
+	return s
+}
+
+// SelectOption modifies the selector
+type SelectOption func(*Selector)
+
+// WithOIDC sets the authorization header using an OIDC token generated for the service
+func WithOIDC() SelectOption {
+	return func(s *Selector) {
+		modifier := func(r *http.Request) {
+			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.url.String())
+			if err != nil {
+				slog.Error("failed to create token source", slog.Any("error", err))
+				return
+			}
+
+			token, err := tokenSource.Token()
+			if err != nil {
+				slog.Error("failed to obtain an OIDC token", slog.Any("error", err))
+				return
+			}
+
+			r.Header.Add("Authorization", "Bearer "+token.AccessToken)
+		}
+
+		s.modifiers = append(s.modifiers, modifier)
 	}
 }
