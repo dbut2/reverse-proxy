@@ -107,12 +107,3 @@ func TestHeaderMatchesRule(t *testing.T) {
 		assert.False(t, match)
 	})
 }
-
-func TestB(t *testing.T) {
-	proxy := rp.New(
-		rp.Select("https://myapi.com", rp.PathIsAt("/api")),
-		rp.Select("https://exmaple.com", rp.Always()),
-	)
-
-	http.ListenAndServe(":8080", proxy)
-}
