@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dbut2/cloud-run-reverse-proxy"
+	"github.com/dbut2/reverse-proxy"
 )
 
 func TestBaseRule(t *testing.T) {

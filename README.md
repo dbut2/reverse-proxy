@@ -7,7 +7,7 @@
 To install the package, run:
 
 ```bash
-go get -u github.com/dbut2/cloud-run-reverse-proxy
+go get -u github.com/dbut2/reverse-proxy
 ```
 
 ## Usage
@@ -15,18 +15,18 @@ go get -u github.com/dbut2/cloud-run-reverse-proxy
 ### Import the package
 
 ```go
-import "github.com/dbut2/cloud-run-reverse-proxy"
+import "github.com/dbut2/reverse-proxy"
 ```
 
 ### Create a reverse proxy
 
-Define your routing rules using the `reverseproxy.Rule` type. You can create rules based on path prefixes or client IP addresses using the `PathRule` and `IPRule` functions. Finally, create a reverse proxy instance with the defined rules using the `New` function.
+Define your routing rules using the `reverseproxy.Selector` type. You can create rules based on path prefixes or client IP addresses using the `PathRule` and `IPRule` functions. Finally, create a reverse proxy instance with the defined rules using the `New` function.
 
 ```go
-rules := []reverseproxy.Rule{
-    // Reverse proxy rules...
+selectors := []rp.Selector{
+    // Reverse proxy selectors...
 }
-proxy := reverseproxy.New(rules)
+proxy := reverseproxy.New(selectors...)
 ```
 
 ### Run the reverse proxy server
@@ -34,8 +34,7 @@ proxy := reverseproxy.New(rules)
 Register the reverse proxy as an HTTP handler and start the server.
 
 ```go
-http.HandleFunc("/", proxy.ServeHTTP)
-http.ListenAndServe(":8080", nil)
+http.ListenAndServe(":8080", proxy)
 ```
 
 ## Example
@@ -50,7 +49,7 @@ import (
     "net/http"
     "os"
 
-    "github.com/dbut2/cloud-run-reverse-proxy"
+    "github.com/dbut2/reverse-proxy"
 )
 
 func main() {
@@ -63,14 +62,14 @@ func main() {
 		port = "8080"
 	}
 
-	// Define routing rules
-	rules := []reverseproxy.Rule{
-		reverseproxy.IPRule(privateClientIP, privateURL),
-		reverseproxy.BaseRule(publicURL),
-	}
+	// Define routing selectors
+	selectors := []rp.Selector{
+		rp.Select(privateURL, rp.IPRule(privateClientIP)),
+		rp.Select(publicURL, rp.BaseRule()),
+    }
 
 	// Create the reverse proxy with the defined rules
-	proxy := reverseproxy.New(rules)
+	proxy := rp.New(selectors...)
 
 	// Register the reverse proxy as an HTTP handler
 	http.HandleFunc("/", proxy.ServeHTTP)

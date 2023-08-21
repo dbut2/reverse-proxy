@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/dbut2/cloud-run-reverse-proxy"
+	"github.com/dbut2/reverse-proxy"
 )
 
 func main() {

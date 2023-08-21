@@ -1,4 +1,4 @@
-module github.com/dbut2/cloud-run-reverse-proxy
+module github.com/dbut2/reverse-proxy
 
 go 1.20
 

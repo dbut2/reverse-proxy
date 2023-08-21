@@ -5,11 +5,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/dbut2/cloud-run-reverse-proxy"
+	rp "github.com/dbut2/reverse-proxy"
 )
 
 func setupService(serviceName string) *httptest.Server {
