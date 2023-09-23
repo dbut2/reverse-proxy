@@ -18,11 +18,11 @@ func New(selectors ...*Selector) *httputil.ReverseProxy {
 			}
 
 			r.SetXForwarded()
-			path, _ := url.JoinPath("/", selector.url.Path, r.Out.URL.Path)
-			r.SetURL(selector.url)
+			path, _ := url.JoinPath("/", selector.Url.Path, r.Out.URL.Path)
+			r.SetURL(selector.Url)
 			r.Out.URL.Path = path
 
-			for _, modifier := range selector.modifiers {
+			for _, modifier := range selector.Modifiers {
 				modifier(r.Out)
 			}
 		},
@@ -34,7 +34,7 @@ func New(selectors ...*Selector) *httputil.ReverseProxy {
 
 func findSelector(selectors []*Selector, in, out *http.Request) (*Selector, bool) {
 	for _, selector := range selectors {
-		if selector.rule(in, out) {
+		if selector.Rule(in, out) {
 			return selector, true
 		}
 	}
@@ -43,10 +43,9 @@ func findSelector(selectors []*Selector, in, out *http.Request) (*Selector, bool
 
 // Selector contains information for selecting and modifying requests
 type Selector struct {
-	rule      Rule
-	url       *url.URL
-	modifiers []func(r *http.Request)
-	opts      []SelectOption
+	Rule      Rule
+	Url       *url.URL
+	Modifiers []func(r *http.Request)
 }
 
 // Select returns a selector to the address for matching on when rule
@@ -55,7 +54,7 @@ func Select(address string, when Rule, opts ...SelectOption) *Selector {
 	if err != nil {
 		panic(err.Error())
 	}
-	s := &Selector{rule: when, url: serviceURL, opts: opts}
+	s := &Selector{Rule: when, Url: serviceURL}
 
 	for _, opt := range opts {
 		opt(s)
@@ -71,7 +70,7 @@ type SelectOption func(*Selector)
 func WithOIDC() SelectOption {
 	return func(s *Selector) {
 		modifier := func(r *http.Request) {
-			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.url.String())
+			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.Url.String())
 			if err != nil {
 				slog.Error("failed to create token source", slog.Any("error", err))
 				return
@@ -86,6 +85,6 @@ func WithOIDC() SelectOption {
 			r.Header.Add("Authorization", "Bearer "+token.AccessToken)
 		}
 
-		s.modifiers = append(s.modifiers, modifier)
+		s.Modifiers = append(s.Modifiers, modifier)
 	}
 }
