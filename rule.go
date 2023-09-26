@@ -10,6 +10,7 @@ import (
 // Rule is a boolean function if a match condition is found
 // in request is for matching
 // out request is for modifying outgoing request, as is in PathIsAt
+// A rule must only modify out if returning true
 type Rule func(in *http.Request, out *http.Request) bool
 
 // Always always matches
@@ -100,8 +101,10 @@ func HostPathIsAt(hostpath string) Rule {
 // AllOf matches if all rules match
 func AllOf(rules ...Rule) Rule {
 	return func(in *http.Request, out *http.Request) bool {
+		preOut := *out
 		for _, rule := range rules {
 			if !rule(in, out) {
+				*out = preOut
 				return false
 			}
 		}
@@ -110,6 +113,7 @@ func AllOf(rules ...Rule) Rule {
 }
 
 // AnyOf matches if any rules match
+// Only the first rule that matches applies
 func AnyOf(rules ...Rule) Rule {
 	return func(in *http.Request, out *http.Request) bool {
 		for _, rule := range rules {
@@ -120,4 +124,9 @@ func AnyOf(rules ...Rule) Rule {
 		}
 		return false
 	}
+}
+
+// Group matches if parent matches and any child matches
+func Group(parent Rule, children ...Rule) Rule {
+	return AllOf(parent, AnyOf(children...))
 }

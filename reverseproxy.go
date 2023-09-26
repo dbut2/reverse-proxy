@@ -18,11 +18,11 @@ func New(selectors ...*Selector) *httputil.ReverseProxy {
 			}
 
 			r.SetXForwarded()
-			path, _ := url.JoinPath("/", selector.Url.Path, r.Out.URL.Path)
-			r.SetURL(selector.Url)
+			path, _ := url.JoinPath("/", selector.url.Path, r.Out.URL.Path)
+			r.SetURL(selector.url)
 			r.Out.URL.Path = path
 
-			for _, modifier := range selector.Modifiers {
+			for _, modifier := range selector.modifiers {
 				modifier(r.Out)
 			}
 		},
@@ -34,7 +34,7 @@ func New(selectors ...*Selector) *httputil.ReverseProxy {
 
 func findSelector(selectors []*Selector, in, out *http.Request) (*Selector, bool) {
 	for _, selector := range selectors {
-		if selector.Rule(in, out) {
+		if selector.rule(in, out) {
 			return selector, true
 		}
 	}
@@ -43,9 +43,9 @@ func findSelector(selectors []*Selector, in, out *http.Request) (*Selector, bool
 
 // Selector contains information for selecting and modifying requests
 type Selector struct {
-	Rule      Rule
-	Url       *url.URL
-	Modifiers []func(r *http.Request)
+	rule      Rule
+	url       *url.URL
+	modifiers []func(r *http.Request)
 }
 
 // Select returns a selector to the address for matching on when rule
@@ -54,13 +54,19 @@ func Select(address string, when Rule, opts ...SelectOption) *Selector {
 	if err != nil {
 		panic(err.Error())
 	}
-	s := &Selector{Rule: when, Url: serviceURL}
+	s := &Selector{rule: when, url: serviceURL}
 
 	for _, opt := range opts {
 		opt(s)
 	}
 
 	return s
+}
+
+type Modifier func(r *http.Request)
+
+func (s *Selector) Modify(m Modifier) {
+	s.modifiers = append(s.modifiers, m)
 }
 
 // SelectOption modifies the selector
@@ -70,7 +76,7 @@ type SelectOption func(*Selector)
 func WithOIDC() SelectOption {
 	return func(s *Selector) {
 		modifier := func(r *http.Request) {
-			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.Url.String())
+			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.url.String())
 			if err != nil {
 				slog.Error("failed to create token source", slog.Any("error", err))
 				return
@@ -85,6 +91,6 @@ func WithOIDC() SelectOption {
 			r.Header.Add("Authorization", "Bearer "+token.AccessToken)
 		}
 
-		s.Modifiers = append(s.Modifiers, modifier)
+		s.modifiers = append(s.modifiers, modifier)
 	}
 }
