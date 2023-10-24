@@ -158,3 +158,8 @@ func AnyOf(rules ...Rule) Rule {
 		Modifier: modifier,
 	}
 }
+
+// Group matches if parent matches and any child matches
+func Group(parent Rule, children ...Rule) Rule {
+	return AllOf(parent, AnyOf(children...))
+}

@@ -21,11 +21,11 @@ func New(selectors ...*Selector) *httputil.ReverseProxy {
 			}
 
 			r.SetXForwarded()
-			path, _ := url.JoinPath("/", selector.Url.Path, r.Out.URL.Path)
-			r.SetURL(selector.Url)
+			path, _ := url.JoinPath("/", selector.url.Path, r.Out.URL.Path)
+			r.SetURL(selector.url)
 			r.Out.URL.Path = path
 
-			for _, modifier := range selector.Modifiers {
+			for _, modifier := range selector.modifiers {
 				modifier(r.Out)
 			}
 		},
@@ -39,7 +39,7 @@ func New(selectors ...*Selector) *httputil.ReverseProxy {
 // the given request. It returns the matched selector and a boolean indicating if a match was found.
 func findSelector(selectors []*Selector, r *http.Request) (*Selector, bool) {
 	for _, selector := range selectors {
-		if selector.Matcher(r) {
+		if selector.matcher(r) {
 			return selector, true
 		}
 	}
@@ -57,9 +57,9 @@ type Modifier func(r *http.Request)
 // a destination URL to which the request should be sent, and a list of Modifiers to apply
 // to the outgoing request.
 type Selector struct {
-	Matcher   Matcher
-	Url       *url.URL
-	Modifiers []Modifier
+	matcher   Matcher
+	url       *url.URL
+	modifiers []Modifier
 }
 
 // Select creates a new selector with the given address, rule, and optional selector modifications.
@@ -70,11 +70,11 @@ func Select(address string, when Rule, opts ...SelectOption) *Selector {
 		panic(err.Error())
 	}
 	s := &Selector{
-		Matcher: when.Matcher,
-		Url:     serviceURL,
+		matcher: when.Matcher,
+		url:     serviceURL,
 	}
 	if when.Modifier != nil {
-		s.Modifiers = append(s.Modifiers, when.Modifier)
+		s.modifiers = append(s.modifiers, when.Modifier)
 	}
 
 	for _, opt := range opts {
@@ -84,7 +84,11 @@ func Select(address string, when Rule, opts ...SelectOption) *Selector {
 	return s
 }
 
-// SelectOption is a function type that describes how to modify the behavior of a selector.
+func (s *Selector) Modify(m Modifier) {
+	s.modifiers = append(s.modifiers, m)
+}
+
+// SelectOption modifies the selector
 type SelectOption func(*Selector)
 
 // WithOIDC returns a SelectOption that modifies the selector to set the authorization header
@@ -92,7 +96,7 @@ type SelectOption func(*Selector)
 func WithOIDC() SelectOption {
 	return func(s *Selector) {
 		modifier := func(r *http.Request) {
-			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.Url.String())
+			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.url.String())
 			if err != nil {
 				slog.Error("failed to create token source", slog.Any("error", err))
 				return
@@ -107,6 +111,6 @@ func WithOIDC() SelectOption {
 			r.Header.Add("Authorization", "Bearer "+token.AccessToken)
 		}
 
-		s.Modifiers = append(s.Modifiers, modifier)
+		s.modifiers = append(s.modifiers, modifier)
 	}
 }
