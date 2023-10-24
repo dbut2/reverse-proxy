@@ -15,7 +15,7 @@ func TestBaseRule(t *testing.T) {
 	req, _ := http.NewRequest("GET", "http://localhost:8000/test", nil)
 
 	t.Run("Always match", func(t *testing.T) {
-		match := rule(req, nil)
+		match := rule.Matcher(req)
 		assert.True(t, match)
 	})
 }
@@ -28,12 +28,12 @@ func TestPathRule(t *testing.T) {
 	reqNoMatch, _ := http.NewRequest("GET", "http://localhost:8000/other/hello", nil)
 
 	t.Run("PathIsAt match", func(t *testing.T) {
-		match := rule(reqMatch, reqMatch)
+		match := rule.Matcher(reqMatch)
 		assert.True(t, match)
 	})
 
 	t.Run("PathIsAt no match", func(t *testing.T) {
-		match := rule(reqNoMatch, reqNoMatch)
+		match := rule.Matcher(reqNoMatch)
 		assert.False(t, match)
 	})
 }
@@ -49,12 +49,12 @@ func TestIPRule(t *testing.T) {
 	reqNoMatch.Header.Set("X-Forwarded-For", "192.168.1.3")
 
 	t.Run("IPMatches match", func(t *testing.T) {
-		match := rule(reqMatch, reqMatch)
+		match := rule.Matcher(reqMatch)
 		assert.True(t, match)
 	})
 
 	t.Run("IPMatches no match", func(t *testing.T) {
-		match := rule(reqNoMatch, reqNoMatch)
+		match := rule.Matcher(reqNoMatch)
 		assert.False(t, match)
 	})
 }
@@ -69,12 +69,12 @@ func TestHeaderRule(t *testing.T) {
 	reqNoMatch, _ := http.NewRequest("GET", "http://localhost:8000/test", nil)
 
 	t.Run("HasHeader match", func(t *testing.T) {
-		match := rule(reqMatch, reqMatch)
+		match := rule.Matcher(reqMatch)
 		assert.True(t, match)
 	})
 
 	t.Run("HasHeader no match", func(t *testing.T) {
-		match := rule(reqNoMatch, reqNoMatch)
+		match := rule.Matcher(reqNoMatch)
 		assert.False(t, match)
 	})
 }
@@ -93,17 +93,17 @@ func TestHeaderMatchesRule(t *testing.T) {
 	reqNoMatchHeader, _ := http.NewRequest("GET", "http://localhost:8000/test", nil)
 
 	t.Run("HeaderContains match", func(t *testing.T) {
-		match := rule(reqMatch, reqMatch)
+		match := rule.Matcher(reqMatch)
 		assert.True(t, match)
 	})
 
 	t.Run("HeaderContains no match value", func(t *testing.T) {
-		match := rule(reqNoMatchValue, reqNoMatchValue)
+		match := rule.Matcher(reqNoMatchValue)
 		assert.False(t, match)
 	})
 
 	t.Run("HeaderContains no match header", func(t *testing.T) {
-		match := rule(reqNoMatchHeader, reqNoMatchHeader)
+		match := rule.Matcher(reqNoMatchHeader)
 		assert.False(t, match)
 	})
 }
