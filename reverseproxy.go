@@ -95,7 +95,7 @@ type SelectOption func(*Selector)
 // of the outgoing request using an OIDC token generated for the target service.
 func WithOIDC() SelectOption {
 	return func(s *Selector) {
-		modifier := func(r *http.Request) {
+		s.Modify(func(r *http.Request) {
 			tokenSource, err := idtoken.NewTokenSource(r.Context(), s.url.String())
 			if err != nil {
 				slog.Error("failed to create token source", slog.Any("error", err))
@@ -109,8 +109,6 @@ func WithOIDC() SelectOption {
 			}
 
 			r.Header.Add("Authorization", "Bearer "+token.AccessToken)
-		}
-
-		s.modifiers = append(s.modifiers, modifier)
+		})
 	}
 }
