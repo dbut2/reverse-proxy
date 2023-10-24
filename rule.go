@@ -159,7 +159,8 @@ func AnyOf(rules ...Rule) Rule {
 	}
 }
 
-// Group matches if parent matches and any child matches
+// Group creates a composite rule that first checks if the parent rule is satisfied.
+// If the parent is met, it then matches if any of the child rules are met.
 func Group(parent Rule, children ...Rule) Rule {
 	return AllOf(parent, AnyOf(children...))
 }

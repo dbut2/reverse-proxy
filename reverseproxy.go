@@ -84,15 +84,17 @@ func Select(address string, when Rule, opts ...SelectOption) *Selector {
 	return s
 }
 
+// Modify appends a new modifier to the selector's list of modifiers.
 func (s *Selector) Modify(m Modifier) {
 	s.modifiers = append(s.modifiers, m)
 }
 
-// SelectOption modifies the selector
+// SelectOption defines a type for functions that customize a selector.
 type SelectOption func(*Selector)
 
-// WithOIDC returns a SelectOption that modifies the selector to set the authorization header
-// of the outgoing request using an OIDC token generated for the target service.
+// WithOIDC constructs a SelectOption that augments a selector to attach
+// an OIDC token as the authorization header for the outgoing request,
+// intended for the target service.
 func WithOIDC() SelectOption {
 	return func(s *Selector) {
 		s.Modify(func(r *http.Request) {
