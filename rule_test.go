@@ -9,6 +9,7 @@ import (
 	"github.com/dbut2/reverse-proxy"
 )
 
+// TestBaseRule tests the Always() rule, which should always match regardless of the HTTP request.
 func TestBaseRule(t *testing.T) {
 	rule := rp.Always()
 
@@ -20,6 +21,7 @@ func TestBaseRule(t *testing.T) {
 	})
 }
 
+// TestPathRule tests the PathIsAt() rule by verifying if an HTTP request matches based on the request path.
 func TestPathRule(t *testing.T) {
 	path := "/test"
 	rule := rp.PathIsAt(path)
@@ -38,6 +40,7 @@ func TestPathRule(t *testing.T) {
 	})
 }
 
+// TestIPRule tests the IPMatches() rule by verifying if an HTTP request matches based on the client IP (X-Forwarded-For header).
 func TestIPRule(t *testing.T) {
 	clientIP := "192.168.1.2"
 	rule := rp.IPMatches(clientIP)
@@ -59,6 +62,7 @@ func TestIPRule(t *testing.T) {
 	})
 }
 
+// TestHeaderRule tests the HasHeader() rule by verifying if an HTTP request matches based on the presence of a specific request header.
 func TestHeaderRule(t *testing.T) {
 	header := "X-My-Header"
 	rule := rp.HasHeader(header)
@@ -79,6 +83,7 @@ func TestHeaderRule(t *testing.T) {
 	})
 }
 
+// TestHeaderMatchesRule tests the HeaderContains() rule by checking if an HTTP request matches based on a specific header-value pair.
 func TestHeaderMatchesRule(t *testing.T) {
 	header := "X-My-Header"
 	value := "test-value"
