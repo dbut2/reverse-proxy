@@ -3,7 +3,7 @@ module github.com/dbut2/reverse-proxy
 go 1.21
 
 require (
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	google.golang.org/api v0.185.0
 )
 
