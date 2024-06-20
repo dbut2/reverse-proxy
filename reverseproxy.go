@@ -11,7 +11,23 @@ import (
 )
 
 // New creates a new reverse proxy instance configured with the provided selectors.
-// The selectors determine which rules apply to which incoming requests.
+// Selectors are used to direct and possibly modify incoming requests according to predetermined rules.
+// The resulting reverse proxy handles requests according to these selectors.
+//
+// Usage example:
+//
+//     selectors := []*Selector{
+//         Select("http://example.com", PathIsAt("/api")),
+//         // More selectors here...
+//     }
+//     proxy := New(selectors...)
+//
+// params:
+// - selectors: A variadic slice of pointers to Selector objects that determine the matching criteria
+//               and the modifications to be made to incoming requests.
+//
+// return:
+// - A pointer to an http.ReverseProxy that routes and modifies requests following the defined selectors.
 func New(selectors ...*Selector) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
@@ -37,6 +53,14 @@ func New(selectors ...*Selector) *httputil.ReverseProxy {
 
 // findSelector searches through the provided selectors and finds the first one that matches
 // the given request. It returns the matched selector and a boolean indicating if a match was found.
+//
+// params:
+// - selectors: A slice of pointers to Selector objects among which to find a match.
+// - r: The incoming HTTP request to match against the selectors.
+//
+// return:
+// - *Selector: The first selector that matches the request, otherwise nil.
+// - bool: A boolean indicating whether a match was found.
 func findSelector(selectors []*Selector, r *http.Request) (*Selector, bool) {
 	for _, selector := range selectors {
 		if selector.matcher(r) {
@@ -55,15 +79,29 @@ type Modifier func(r *http.Request)
 // Selector defines the criteria and actions for selecting and modifying requests in the reverse proxy.
 // It contains a Matcher to decide if the Selector applies to an incoming request,
 // a destination URL to which the request should be sent, and a list of Modifiers to apply
-// to the outgoing request.
+// to the outgoing request before it is sent to the target service.
 type Selector struct {
 	matcher   Matcher
 	url       *url.URL
 	modifiers []Modifier
 }
 
-// Select creates a new selector with the given address, rule, and optional selector modifications.
-// The "when" rule determines when this selector should be applied to incoming requests.
+// Select creates a new selector with the given address, rule, and optional selector modifications (options).
+// The "when" rule contains the conditions under which this selector should be applied to incoming requests.
+//
+// Usage example:
+//
+//     selector := Select("http://backend-service/api", PathIsAt("/api"), WithOIDC())
+//
+// params:
+// - address: The target URL as a string where requests matching the rule will be directed.
+// - when: A Rule object that defines the conditions for the match.
+// - opts: Variadic optional selector options to modify how a matching request is handled.
+//
+// return:
+//
+// A pointer to a Selector that is configured with the target URL, the matching rule,
+// and any provided modification functions.
 func Select(address string, when Rule, opts ...SelectOption) *Selector {
 	serviceURL, err := url.Parse(address)
 	if err != nil {
@@ -85,16 +123,28 @@ func Select(address string, when Rule, opts ...SelectOption) *Selector {
 }
 
 // Modify appends a new modifier to the selector's list of modifiers.
+// This allows on-the-fly modification of the selector's behavior.
+//
+// params:
+// - m: The Modifier function that alters the outgoing request.
 func (s *Selector) Modify(m Modifier) {
 	s.modifiers = append(s.modifiers, m)
 }
 
 // SelectOption defines a type for functions that customize a selector.
+// These functions can add modifications to selectors that are applied to outgoing requests.
 type SelectOption func(*Selector)
 
 // WithOIDC constructs a SelectOption that augments a selector to attach
 // an OIDC token as the authorization header for the outgoing request,
 // intended for the target service.
+//
+// Usage example:
+//
+//     selector := Select("https://secure-service", Always(), WithOIDC())
+//
+// return:
+// A SelectOption that configures the Selector to attach an OIDC token to the outgoing request header.
 func WithOIDC() SelectOption {
 	return func(s *Selector) {
 		s.Modify(func(r *http.Request) {
