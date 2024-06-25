@@ -4,11 +4,11 @@ go 1.21
 
 require (
 	github.com/stretchr/testify v1.9.0
-	google.golang.org/api v0.185.0
+	google.golang.org/api v0.186.0
 )
 
 require (
-	cloud.google.com/go/auth v0.5.1 // indirect
+	cloud.google.com/go/auth v0.6.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.2 // indirect
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
